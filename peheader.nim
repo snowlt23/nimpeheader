@@ -147,6 +147,8 @@ echo imgheader.FileHeader.Machine and 0x0002
 echo imgheader.FileHeader.Machine and 0x0100
 echo imgheader.FileHeader.Machine and 0x1000
 echo imgheader.FileHeader.Machine and 0x2000
+
+echo imgheader.OptionalHeader.WMagic
 echo imgheader.OptionalHeader.DataDirectory[0].VirtualAddress
 
 echo imgheader.exportdir.NumberOfNames
