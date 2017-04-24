@@ -1,5 +1,6 @@
 
 import binmacro
+import strutils
 
 const IMAGE_NUMBEROF_DIRECTORY_ENTRIES = 16
 
@@ -25,7 +26,7 @@ binary IMAGE_DOS_HEADER:
   e_lfanew: int32
 
 binary IMAGE_FILE_HEADER:
-  Machine: byte2
+  Machine: uint16
   NumberOfSections: uint16
   TimeDateStamp: uint32
   PointerToSymbolTable: uint32
@@ -38,9 +39,9 @@ binary IMAGE_DATA_DIRECTORY:
   Size: uint32
 
 binary IMAGE_OPTIONAL_HEADER32:
-  WMagic: bytes(2)
-  MajorLinkerVersion: byte
-  MinorLinkerVersion: byte
+  Magic: uint16
+  MajorLinkerVersion: uint8 
+  MinorLinkerVersion: uint8 
   SizeOfCode: uint32
   SizeOfInitializedData: uint32
   SizeOfUninitializedData: uint32
@@ -89,8 +90,25 @@ binary IMAGE_NT_HEADER32:
   Signature: bytes(4)
   FileHeader: IMAGE_FILE_HEADER
   OptionalHeader: IMAGE_OPTIONAL_HEADER32
-  skip: move(OptionalHeader.DataDirectory[0].VirtualAddress.int - dos.e_lfanew - IMAGE_FILE_HEADER_SIZE - IMAGE_OPTIONAL_HEADER32_SIZE)
-  exportdir: IMAGE_EXPORT_DIRECTORY
+  # skip: move(OptionalHeader.DataDirectory[0].VirtualAddress.int - dos.e_lfanew - IMAGE_FILE_HEADER_SIZE - IMAGE_OPTIONAL_HEADER32_SIZE)
+  # skip: move(OptionalHeader.DataDirectory[0].VirtualAddress.int - dos.e_lfanew - IMAGE_FILE_HEADER_SIZE - IMAGE_OPTIONAL_HEADER32_SIZE + OptionalHeader.ImageBase.int)
+  # exportdir: IMAGE_EXPORT_DIRECTORY
+
+binary IMAGE_SECTION_HEARDER:
+  Name: bytes(8)
+  VirtualSize: uint32
+  VirtualAddress: uint32
+  SizeOfRawData: uint32
+  PointerToRawData: uint32
+  PointerToRelocations: uint32
+  PointerToLinenumbers: uint32
+  NumberOfRelocations: uint16
+  NumberOfLinenumbers: uint16
+  Characteristics: uint32
+
+binary IMAGE_HEARDER32:
+  nt: IMAGE_NT_HEADER32
+  sectionheaders: repeat[IMAGE_SECTION_HEARDER](nt.FileHeader.NumberOfSections.int)
 
 # type
 #   ExportFunction* = object
@@ -132,23 +150,25 @@ binary IMAGE_NT_HEADER32:
 #         name: name,
 #     ))
 
-let dllstream = newStringStream(readFile("test.dll"))
-var imgheader: IMAGE_NT_HEADER32
-readBinary(dllstream, imgheader)
+let imgheader = parseBinary[IMAGE_HEARDER32](readFile("test.dll"))
 # let exdir = imgheader.OptionalHeader.readImageExportDirectory(dllstream)
 # let fns = exdir.readExportFunctions(dllstream)
 # echo fns
 
-echo imgheader.dos.e_magic
-echo imgheader.dos.e_lfanew
-echo imgheader.Signature
+echo imgheader.nt.dos.e_magic
+echo imgheader.nt.dos.e_lfanew.toHex
+echo imgheader.nt.Signature
 
-echo imgheader.FileHeader.Machine and 0x0002
-echo imgheader.FileHeader.Machine and 0x0100
-echo imgheader.FileHeader.Machine and 0x1000
-echo imgheader.FileHeader.Machine and 0x2000
+echo imgheader.nt.FileHeader.Machine.toHex
+echo imgheader.nt.FileHeader.Characteristics.toHex
 
-echo imgheader.OptionalHeader.WMagic
-echo imgheader.OptionalHeader.DataDirectory[0].VirtualAddress
+echo imgheader.nt.OptionalHeader.Magic.toHex
+echo imgheader.nt.OptionalHeader.DataDirectory[0].VirtualAddress.toHex
+ 
+echo imgheader.nt.OptionalHeader.ImageBase.toHex
 
-echo imgheader.exportdir.NumberOfNames
+echo imgheader.sectionheaders.toSeq()[0].Name
+echo imgheader.sectionheaders.toSeq()[1].Name
+echo imgheader.sectionheaders.toSeq()[2].Name
+
+# echo imgheader.exportdir.NumberOfNames

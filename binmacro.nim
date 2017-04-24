@@ -66,7 +66,10 @@ proc genBinarySize*(name: NimNode, body: NimNode): NimNode {.compileTime.} =
        else:
          return newEmptyNode()
     of nnkCall, nnkCallStrLit, nnkCommand:
-      addexpr.add(parseExpr(fmt"${fieldexpr[0]}Size(${fieldexpr.repr})"))
+      if fieldexpr[0].kind == nnkBracketExpr:
+        return newEmptyNode()
+      else:
+        addexpr.add(parseExpr(fmt"${fieldexpr[0]}Size(${fieldexpr.repr})"))
     else:
       return newEmptyNode()
   let sizeid = ident(fmt"${name}Size").postfix("*")
@@ -97,12 +100,22 @@ proc genBinaryTypeDef*(name: NimNode, body: NimNode): NimNode {.compileTime.} =
         newEmptyNode(),
       ))
     of nnkCall, nnkCallStrLit, nnkCommand:
-      let readid = ident("read" & $fieldexpr[0] & "Binary")
-      fieldlist.add(nnkIdentDefs.newTree(
-        fieldname.postfix("*"),
-        nnkCall.newTree(ident"replaceByProcType", readid),
-        newEmptyNode(),
-      ))
+      if fieldexpr[0].kind == nnkBracketExpr:
+        var replacecall = nnkCall.newTree(ident("replaceBy" & $fieldexpr[0][0]))
+        for i in 1..<fieldexpr[0].len:
+          replacecall.add(fieldexpr[0][i])
+        fieldlist.add(nnkIdentDefs.newTree(
+          fieldname.postfix("*"),
+          replacecall,
+          newEmptyNode(),
+        ))
+      else:
+        let readid = ident("read" & $fieldexpr[0] & "Binary")
+        fieldlist.add(nnkIdentDefs.newTree(
+          fieldname.postfix("*"),
+          nnkCall.newTree(ident"replaceByProcType", readid),
+          newEmptyNode(),
+        ))
     else:
       error fmt"unsupported binary type: ${fieldexpr.repr} (${fieldexpr.kind})", b
       
@@ -193,12 +206,16 @@ macro binary*(name: untyped, body: untyped): untyped =
 
   echo result.repr
 
-macro rawreadbin*(body: typed): untyped =
+macro rawreadbin*(body: untyped): untyped =
   var bodycopy = body.copy
-  let procname = ($body[0].removePostfix()).replace("read", "read" & $body[3][2][1][0])
+  let tname = if body[3][2][1][0].kind == nnkBracketExpr:
+                $body[3][2][1][0][0]
+              else:
+                $body[3][2][1][0]
+  let procname = ($body[0].removePostfix()).replace("read", "read" & tname)
   bodycopy[0] = ident(procname).postfix("*")
   bodycopy[6] = nnkDiscardStmt.newTree(newEmptyNode())
-  result = bodycopy
+  result = newStmtList(bodycopy, body)
 
 include binmacrodef
 

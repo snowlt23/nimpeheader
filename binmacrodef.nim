@@ -8,6 +8,7 @@ type
     data*: array[3, byte]
   byte4* = object
     data*: array[4, byte]
+  repeat*[T] = distinct seq[T]
 
 proc writeBytes*(arr: var openarray[byte], val: int) =
   for i in 0..<arr.len:
@@ -24,9 +25,9 @@ proc int*(bs: openarray[byte]): int =
   for i in 0..<bs.len:
     let n = bs.len-1 - i
     result = result or (cast[int](bs[n]) shl (i*8))
-converter int*(b2: byte2): int = b2.data.int
-converter int*(b3: byte3): int = b3.data.int
-converter int*(b4: byte4): int = b4.data.int
+proc int*(b2: byte2): int = b2.data.int
+proc int*(b3: byte3): int = b3.data.int
+proc int*(b4: byte4): int = b4.data.int
 proc `$`*(b: byte2): string = $b.int
 proc `$`*(b: byte3): string = $b.int
 proc `$`*(b: byte4): string = $b.int
@@ -38,17 +39,21 @@ proc `$`*(bs: bytes): string = string(bs)
 
 proc `$`*(id: ID): string = string(id)
 
+converter toSeq*[T](r: repeat[T]): seq[T] = seq[T](r)
+
 #
 # Size
 #
 
 let charSize* = sizeof(char)
 let byteSize* = sizeof(byte)
+let uint8Size* = sizeof(uint8)
 let uint16Size* = sizeof(uint16)
 let uint32Size* = sizeof(uint32)
 let int32Size* = sizeof(int32)
 let byte2Size* = 2
 let byte3Size* = 3
+let byte4Size* = 4
 
 macro idSize*(e: untyped): untyped =
   result = newIntLitNode(e[1].strval.len) 
@@ -105,6 +110,13 @@ proc readBinary*[T](stream: Stream, binobj: var ptr T) =
   readBinary(stream, p)
   binobj = cast[ptr T](p)
 
+template replaceByRepeat*(T: typedesc): untyped =
+  repeat[T]
+proc readBinary*[T](stream: Stream, binobj: var repeat[T], len: int) =
+  binobj = repeat[T](newSeq[T](len))
+  for i in 0..<len:
+    readBinary(stream, seq[T](binobj)[i])
+
 #
 # writeBinary
 #
@@ -143,6 +155,9 @@ proc writeBinary*[T](stream: Stream, arr: openarray[T]) =
     stream.writeBinary(v)
 proc writeBinary*[T](stream: Stream, p: ptr T) =
   stream.write(cast[uint](p))
+proc writeBinary*[T](stream: Stream, binobj: repeat[T]) =
+  for v in seq[T](binobj):
+    stream.writeBinary(v)
 
 #
 # Stream Control
