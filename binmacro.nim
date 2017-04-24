@@ -134,7 +134,6 @@ proc genReadBinaryProc*(name: NimNode, body: NimNode): NimNode {.compileTime.} =
   if name.isInheritance:
     let readid = ident(fmt"readBinary")
     procbody.add(parseExpr(fmt"${readid}(stream, ${name.supername.get}(binobj))"))
-    procbody.add(parseExpr(fmt"let super = binobj"))
 
   for b in body:
     b.expectBinaryType()
@@ -150,30 +149,27 @@ proc genReadBinaryProc*(name: NimNode, body: NimNode): NimNode {.compileTime.} =
     case fieldexpr.kind
     of nnkIdent:
       let readid = ident("readBinary")
-      procbody.add(parseExpr(fmt"${readid}(${streamid}, binobj.${fieldname})"))
-      procbody.add(parseExpr(fmt"let ${fieldname} {.inject.} = binobj.${fieldname}"))
+      procbody.add(parseExpr(fmt"${readid}(${streamid}, self.${fieldname})"))
     of nnkBracketExpr:
       if $fieldexpr[0] == "array":
         let readid = ident("readBinary")
-        procbody.add(parseExpr(fmt"${readid}(${streamid}, binobj.${fieldname})"))
-        procbody.add(parseExpr(fmt"let ${fieldname} {.inject.} = binobj.${fieldname}"))
+        procbody.add(parseExpr(fmt"${readid}(${streamid}, self.${fieldname})"))
       else:
         error "unsupported binary type: " & fieldexpr.repr, b
     of nnkCall, nnkCallStrLit, nnkCommand:
       let readid = ident("readBinary")
       var callexpr = nnkCall.newTree(readid)
       callexpr.add(streamid)
-      callexpr.add(parseExpr(fmt"binobj.${fieldname}"))
+      callexpr.add(parseExpr(fmt"self.${fieldname}"))
       for i in 1..<fieldexpr.len:
         callexpr.add(fieldexpr[i])
       procbody.add(parseExpr(fmt"${callexpr.repr}"))
-      procbody.add(parseExpr(fmt"let ${fieldname} {.inject.} = binobj.${fieldname}"))
     else:
       error "unsupported binary type: " & fieldexpr.repr, b
 
   result = newStmtList()
   result.add(parseExpr("{.push hint[XDeclaredButNotUsed]: off.}"))
-  result.add(parseExpr(fmt"proc ${procname}*(stream: Stream, binobj: var ${name.typename}) = discard"))
+  result.add(parseExpr(fmt"proc ${procname}*(stream: StringStream, self: var ${name.typename}) = discard"))
   result[^1][6] = procbody
   result.add(parseExpr("{.pop.}"))
 
@@ -202,7 +198,7 @@ macro binary*(name: untyped, body: untyped): untyped =
   result.add(genBinarySize(name, body))
   result.add(genBinaryTypeDef(name, body))
   result.add(genReadBinaryProc(name, body))
-  result.add(genWriteBinaryProc(name, body))
+  # result.add(genWriteBinaryProc(name, body))
 
   echo result.repr
 

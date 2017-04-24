@@ -67,105 +67,107 @@ macro bytesSize*(e: untyped): untyped =
 # readBinary
 #
 
-proc readBinary*(stream: Stream, binobj: var char) = binobj = stream.readChar()
-proc readBinary*(stream: Stream, binobj: var byte) = binobj = stream.readChar().byte
-proc readBinary*(stream: Stream, binobj: var uint16) = binobj = stream.readInt16().uint16
-proc readBinary*(stream: Stream, binobj: var uint32) = binobj = stream.readInt32().uint32
-proc readBinary*(stream: Stream, binobj: var int32) = binobj = stream.readInt32()
-proc readBinary*(stream: Stream, binobj: var byte2) =
+proc readBinary*(stream: StringStream, binobj: var char) = binobj = stream.readChar()
+proc readBinary*(stream: StringStream, binobj: var byte) = binobj = stream.readChar().byte
+proc readBinary*(stream: StringStream, binobj: var uint16) = binobj = stream.readInt16().uint16
+proc readBinary*(stream: StringStream, binobj: var uint32) = binobj = stream.readInt32().uint32
+proc readBinary*(stream: StringStream, binobj: var int32) = binobj = stream.readInt32()
+proc readBinary*(stream: StringStream, binobj: var byte2) =
   binobj.data[0] = stream.readChar().byte
   binobj.data[1] = stream.readChar().byte
-proc readBinary*(stream: Stream, binobj: var byte3) =
+proc readBinary*(stream: StringStream, binobj: var byte3) =
   binobj.data[0] = stream.readChar().byte
   binobj.data[1] = stream.readChar().byte
   binobj.data[2] = stream.readChar().byte
-proc readBinary*(stream: Stream, binobj: var byte4) =
+proc readBinary*(stream: StringStream, binobj: var byte4) =
   binobj.data[0] = stream.readChar().byte
   binobj.data[1] = stream.readChar().byte
   binobj.data[2] = stream.readChar().byte
   binobj.data[3] = stream.readChar().byte
-proc readBinary*(stream: Stream, binobj: var bytes, size: int) {.rawreadbin.} =
+proc readBinary*(stream: StringStream, binobj: var bytes, size: int) {.rawreadbin.} =
   binobj = bytes(newString(size))
   for i in 0..<size:
     binobj[i] = stream.readChar()
-proc readBinary*(stream: Stream, binobj: var ID, s: string) {.rawreadbin.} =
+proc readBinary*(stream: StringStream, binobj: var ID, s: string) {.rawreadbin.} =
   var ss = ""
   for c in s:
     ss.add(stream.readChar())
     if not (ss[^1] == c):
       raise newException(BinaryError, fmt"""unmatched id: "${s}" == "${ss}"""")
   binobj = ID(s)
-proc readBinary*(stream: Stream, binobj: var string) =
+proc readBinary*(stream: StringStream, binobj: var string) =
   binobj = ""
   while true:
     let c = stream.readChar()
     if c == '\0':
       break
     binobj.add(c)
-proc readBinary*[T](stream: Stream, binobj: var openarray[T]) =
+proc readBinary*[T](stream: StringStream, binobj: var openarray[T]) =
   for v in binobj.mitems:
     readBinary(stream, v)
-proc readBinary*[T](stream: Stream, binobj: var ptr T) =
+proc readBinary*[T](stream: StringStream, binobj: var seq[T], len: int) =
+  binobj = newSeq[T](len)
+  for i in 0..<len:
+    readBinary(stream, binobj[i])
+proc readBinary*[T](stream: StringStream, binobj: var ptr T) =
   var p: uint
   readBinary(stream, p)
   binobj = cast[ptr T](p)
 
-template replaceByRepeat*(T: typedesc): untyped =
-  repeat[T]
-proc readBinary*[T](stream: Stream, binobj: var repeat[T], len: int) =
-  binobj = repeat[T](newSeq[T](len))
-  for i in 0..<len:
-    readBinary(stream, seq[T](binobj)[i])
+template replaceBySeq*(T: typedesc): untyped =
+  seq[T]
 
 #
 # writeBinary
 #
 
-proc writeBinary*(stream: Stream, c: char) =
+proc writeBinary*(stream: StringStream, c: char) =
   stream.write(c)
-proc writeBinary*(stream: Stream, b: byte) =
+proc writeBinary*(stream: StringStream, b: byte) =
   stream.write(b)
-proc writeBinary*(stream: Stream, i: uint16) =
+proc writeBinary*(stream: StringStream, i: uint16) =
   stream.write(i)
-proc writeBinary*(stream: Stream, i: uint32) =
+proc writeBinary*(stream: StringStream, i: uint32) =
   stream.write(i)
-proc writeBinary*(stream: Stream, i: int32) =
+proc writeBinary*(stream: StringStream, i: int32) =
   stream.write(i)
-proc writeBinary*(stream: Stream, u: byte2) =
+proc writeBinary*(stream: StringStream, u: byte2) =
   stream.write(u.data[0])
   stream.write(u.data[1])
-proc writeBinary*(stream: Stream, u: byte3) =
+proc writeBinary*(stream: StringStream, u: byte3) =
   stream.write(u.data[0])
   stream.write(u.data[1])
   stream.write(u.data[2])
-proc writeBinary*(stream: Stream, u: byte4) =
+proc writeBinary*(stream: StringStream, u: byte4) =
   stream.write(u.data[0])
   stream.write(u.data[1])
   stream.write(u.data[2])
   stream.write(u.data[3])
-proc writeBinary*(stream: Stream, s: string) =
+proc writeBinary*(stream: StringStream, s: string) =
   for c in s:
     stream.write(c)
-proc writeBinary*(stream: Stream, s: bytes) =
+proc writeBinary*(stream: StringStream, s: bytes) =
   stream.writeBinary(string(s))
-proc writeBinary*(stream: Stream, s: ID) =
+proc writeBinary*(stream: StringStream, s: ID) =
   stream.writeBinary(string(s))
-proc writeBinary*[T](stream: Stream, arr: openarray[T]) =
+proc writeBinary*[T](stream: StringStream, arr: openarray[T]) =
   for v in arr:
     stream.writeBinary(v)
-proc writeBinary*[T](stream: Stream, p: ptr T) =
+proc writeBinary*[T](stream: StringStream, p: ptr T) =
   stream.write(cast[uint](p))
-proc writeBinary*[T](stream: Stream, binobj: repeat[T]) =
+proc writeBinary*[T](stream: StringStream, binobj: repeat[T]) =
   for v in seq[T](binobj):
     stream.writeBinary(v)
 
 #
-# Stream Control
+# StringStream Control
 #
 
-proc move*(stream: Stream, len: int) =
+proc move*(stream: StringStream, len: int) =
   for i in 0..<len:
     discard stream.readChar()
+proc moveTo*(stream: StringStream, pos: int) =
+  stream.setPosition(pos)
 
 #
 # Utils

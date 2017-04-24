@@ -71,6 +71,25 @@ binary IMAGE_OPTIONAL_HEADER32:
   NumberOfRvaAndSizes: uint32
   DataDirectory: array[IMAGE_NUMBEROF_DIRECTORY_ENTRIES, IMAGE_DATA_DIRECTORY]
 
+binary IMAGE_NT_HEADER32:
+  dos: IMAGE_DOS_HEADER
+  space: bytes(self.dos.e_lfanew - IMAGE_DOS_HEADER_SIZE)
+  Signature: bytes(4)
+  FileHeader: IMAGE_FILE_HEADER
+  OptionalHeader: IMAGE_OPTIONAL_HEADER32
+
+binary IMAGE_SECTION_HEADER:
+  Name: bytes(8)
+  VirtualSize: uint32
+  VirtualAddress: uint32
+  SizeOfRawData: uint32
+  PointerToRawData: uint32
+  PointerToRelocations: uint32
+  PointerToLinenumbers: uint32
+  NumberOfRelocations: uint16
+  NumberOfLinenumbers: uint16
+  Characteristics: uint32
+
 binary IMAGE_EXPORT_DIRECTORY:
   Characteristics: uint32
   TimeDateStamp: uint32
@@ -84,76 +103,44 @@ binary IMAGE_EXPORT_DIRECTORY:
   AddressOfNames: uint32
   AddressOfNameOrdinals: uint32
 
-binary IMAGE_NT_HEADER32:
-  dos: IMAGE_DOS_HEADER
-  space: bytes(dos.e_lfanew - IMAGE_DOS_HEADER_SIZE)
-  Signature: bytes(4)
-  FileHeader: IMAGE_FILE_HEADER
-  OptionalHeader: IMAGE_OPTIONAL_HEADER32
-  # skip: move(OptionalHeader.DataDirectory[0].VirtualAddress.int - dos.e_lfanew - IMAGE_FILE_HEADER_SIZE - IMAGE_OPTIONAL_HEADER32_SIZE)
-  # skip: move(OptionalHeader.DataDirectory[0].VirtualAddress.int - dos.e_lfanew - IMAGE_FILE_HEADER_SIZE - IMAGE_OPTIONAL_HEADER32_SIZE + OptionalHeader.ImageBase.int)
-  # exportdir: IMAGE_EXPORT_DIRECTORY
+type
+  SectionKind* = enum
+    sectionText
+    sectionData
+    sectionRData
+    sectionBSS
+    sectionEData
+    sectionIData
+    sectionCRT
+    sectionTLS
+    sectionReloc
+    sectionOther
+  Section* = object
+    case kind*: SectionKind
+    of sectionEData:
+      exdir*: IMAGE_EXPORT_DIRECTORY
+    else:
+      data*: bytes
 
-binary IMAGE_SECTION_HEARDER:
-  Name: bytes(8)
-  VirtualSize: uint32
-  VirtualAddress: uint32
-  SizeOfRawData: uint32
-  PointerToRawData: uint32
-  PointerToRelocations: uint32
-  PointerToLinenumbers: uint32
-  NumberOfRelocations: uint16
-  NumberOfLinenumbers: uint16
-  Characteristics: uint32
+proc readBinary*(stream: StringStream, section: var Section, sectionheader: IMAGE_SECTION_HEADER) {.rawreadbin.} =
+  stream.moveTo(sectionheader.PointerToRawData.int)
+  if ($sectionheader.Name).startsWith(".edata"):
+    section.kind = sectionEData
+    stream.readBinary(section.exdir)
+  else:
+    section.kind = sectionOther
+    stream.readBinary(section.data, sectionheader.SizeOfRawData.int)
+proc readBinary*(stream: StringStream, sections: var seq[Section], sectionheaders: seq[IMAGE_SECTION_HEADER]) {.rawreadbin.} =
+  sections = newSeq[Section](sectionheaders.len)
+  for i in 0..<sectionheaders.len:
+    stream.readBinary(sections[i], sectionheaders[i])
 
 binary IMAGE_HEARDER32:
   nt: IMAGE_NT_HEADER32
-  sectionheaders: repeat[IMAGE_SECTION_HEARDER](nt.FileHeader.NumberOfSections.int)
-
-# type
-#   ExportFunction* = object
-#     address*: pointer
-#     name*: string
-
-# proc readImageExportDirectory*(optheader: IMAGE_OPTIONAL_HEADER32, bin: StringStream): IMAGE_EXPORT_DIRECTORY =
-#   let address = optheader.DataDirectory[0].VirtualAddress.int
-#   bin.setPosition(address)
-#   bin.readBinary(result)
-# proc readExportFunctions*(exdir: IMAGE_EXPORT_DIRECTORY, bin: StringStream): seq[ExportFunction] =
-#   bin.setPosition(exdir.AddressOfNames.int)
-#   var namervas = newSeq[uint32]()
-#   for i in 0..<exdir.NumberOfNames:
-#     var namerva: uint32
-#     bin.readBinary(namerva)
-#     namervas.add(namerva)
-
-#   bin.setPosition(exdir.AddressOfNameOrdinals.int)
-#   var ords = newSeq[int]()
-#   for i in 0..<exdir.NumberOfNames:
-#     var ordval: uint32
-#     bin.readBinary(ordval)
-
-#   bin.setPosition(exdir.AddressOfNames.int)
-#   var procrvas = newSeq[uint32]()
-#   for i in 0..<exdir.NumberOfFunctions:
-#     var procrva: uint32
-#     bin.readBinary(procrva)
-#     procrvas.add(procrva)
-
-#   result = newSeq[ExportFunction]()
-#   for i in 0..<namervas.len:
-#     bin.setPosition(namervas[i].int)
-#     var name = ""
-#     bin.readBinary(name)
-#     result.add(ExportFunction(
-#         address: cast[pointer](procrvas[ords[i]]),
-#         name: name,
-#     ))
+  sectionheaders: seq[IMAGE_SECTION_HEADER](self.nt.FileHeader.NumberOfSections.int)
+  sections: seq[Section](self.sectionheaders)
 
 let imgheader = parseBinary[IMAGE_HEARDER32](readFile("test.dll"))
-# let exdir = imgheader.OptionalHeader.readImageExportDirectory(dllstream)
-# let fns = exdir.readExportFunctions(dllstream)
-# echo fns
 
 echo imgheader.nt.dos.e_magic
 echo imgheader.nt.dos.e_lfanew.toHex
@@ -167,8 +154,11 @@ echo imgheader.nt.OptionalHeader.DataDirectory[0].VirtualAddress.toHex
  
 echo imgheader.nt.OptionalHeader.ImageBase.toHex
 
-echo imgheader.sectionheaders.toSeq()[0].Name
-echo imgheader.sectionheaders.toSeq()[1].Name
-echo imgheader.sectionheaders.toSeq()[2].Name
+echo imgheader.sectionheaders[0].Name
+echo imgheader.sectionheaders[1].Name
+echo imgheader.sectionheaders[2].Name
 
-# echo imgheader.exportdir.NumberOfNames
+for section in imgheader.sections:
+  echo section.kind
+  if section.kind == sectionEData:
+    echo section.exdir.NumberOfFunctions
