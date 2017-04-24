@@ -122,23 +122,61 @@ type
     else:
       data*: bytes
 
-proc readBinary*(stream: StringStream, section: var Section, sectionheader: IMAGE_SECTION_HEADER) {.rawreadbin.} =
-  stream.moveTo(sectionheader.PointerToRawData.int)
+proc readBinary*(stream: StringStream, section: var Section, sectionheader: IMAGE_SECTION_HEADER, datadirs: seq[IMAGE_DATA_DIRECTORY]) {.rawreadbin.} =
   if ($sectionheader.Name).startsWith(".edata"):
+    stream.moveTo(int(datadirs[0].VirtualAddress - sectionheader.VirtualAddress + sectionheader.PointerToRawData))
     section.kind = sectionEData
     stream.readBinary(section.exdir)
   else:
+    stream.moveTo(sectionheader.PointerToRawData.int) # TODO:
     section.kind = sectionOther
     stream.readBinary(section.data, sectionheader.SizeOfRawData.int)
-proc readBinary*(stream: StringStream, sections: var seq[Section], sectionheaders: seq[IMAGE_SECTION_HEADER]) {.rawreadbin.} =
+proc readBinary*(stream: StringStream, sections: var seq[Section], sectionheaders: seq[IMAGE_SECTION_HEADER], datadirs: seq[IMAGE_DATA_DIRECTORY]) {.rawreadbin.} =
   sections = newSeq[Section](sectionheaders.len)
   for i in 0..<sectionheaders.len:
-    stream.readBinary(sections[i], sectionheaders[i])
+    stream.readBinary(sections[i], sectionheaders[i], datadirs)
 
 binary IMAGE_HEARDER32:
   nt: IMAGE_NT_HEADER32
   sectionheaders: seq[IMAGE_SECTION_HEADER](self.nt.FileHeader.NumberOfSections.int)
-  sections: seq[Section](self.sectionheaders)
+  sections: seq[Section](self.sectionheaders, @(self.nt.OptionalHeader.DataDirectory))
+
+type
+  ExportFunction* = object
+    address*: uint32
+    name*: string
+
+proc readExportFunctions*(stream: StringStream, sectionheader: IMAGE_SECTION_HEADER, exdir: IMAGE_EXPORT_DIRECTORY): seq[ExportFunction] =
+  stream.moveTo(int(exdir.AddressOfNames - sectionheader.VirtualAddress + sectionheader.PointerToRawData))
+  var namervas = newSeq[uint32]()
+  for i in 0..<exdir.NumberOfNames:
+    var namerva: uint32
+    stream.readBinary(namerva)
+    namervas.add(namerva)
+
+  stream.moveTo(int(exdir.AddressOfNameOrdinals - sectionheader.VirtualAddress + sectionheader.PointerToRawData))
+  var ords = newSeq[uint16]()
+  for i in 0..<exdir.NumberOfNames:
+    var ordval: uint16
+    stream.readBinary(ordval)
+    ords.add(ordval)
+
+  stream.moveTo(int(exdir.AddressOfFunctions - sectionheader.VirtualAddress + sectionheader.PointerToRawData))
+  var procrvas = newSeq[uint32]()
+  for i in 0..<exdir.NumberOfFunctions:
+    var procrva: uint32
+    stream.readBinary(procrva)
+    procrvas.add(procrva)
+
+  result = newSeq[ExportFunction]()
+  for i in 0..<namervas.len:
+    stream.moveTo(int(namervas[i] - sectionheader.VirtualAddress + sectionheader.PointerToRawData))
+    var name = ""
+    stream.readBinary(name)
+    result.add(ExportFunction(
+        address: procrvas[int(ords[i].uint32 - exdir.Base + 1)],
+        name: name,
+    ))
 
 let imgheader = parseBinary[IMAGE_HEARDER32](readFile("test.dll"))
 
@@ -158,7 +196,7 @@ echo imgheader.sectionheaders[0].Name
 echo imgheader.sectionheaders[1].Name
 echo imgheader.sectionheaders[2].Name
 
-for section in imgheader.sections:
-  echo section.kind
-  if section.kind == sectionEData:
-    echo section.exdir.NumberOfFunctions
+for i in 0..<imgheader.sectionheaders.len:
+  if imgheader.sections[i].kind == sectionEData:
+    let stream = newStringStream(readFile("test.dll"))
+    echo stream.readExportFunctions(imgheader.sectionheaders[i], imgheader.sections[i].exdir)
