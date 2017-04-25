@@ -177,6 +177,8 @@ proc toBinary*[T](binobj: T): string =
   var stream = newStringStream()
   stream.writeBinary(binobj)
   return stream.data
+proc parseBinary*[T](stream: StringStream): T =
+  readBinary(stream, result)
 proc parseBinary*[T](bin: string): T =
   var stream = newStringStream(bin)
   readBinary(stream, result)

@@ -150,32 +150,24 @@ proc readExportFunctions*(stream: StringStream, sectionheader: IMAGE_SECTION_HEA
   stream.moveTo(int(exdir.AddressOfNames - sectionheader.VirtualAddress + sectionheader.PointerToRawData))
   var namervas = newSeq[uint32]()
   for i in 0..<exdir.NumberOfNames:
-    var namerva: uint32
-    stream.readBinary(namerva)
-    namervas.add(namerva)
+    namervas.add(parseBinary[uint32](stream))
 
   stream.moveTo(int(exdir.AddressOfNameOrdinals - sectionheader.VirtualAddress + sectionheader.PointerToRawData))
   var ords = newSeq[uint16]()
   for i in 0..<exdir.NumberOfNames:
-    var ordval: uint16
-    stream.readBinary(ordval)
-    ords.add(ordval)
+    ords.add(parseBinary[uint16](stream))
 
   stream.moveTo(int(exdir.AddressOfFunctions - sectionheader.VirtualAddress + sectionheader.PointerToRawData))
   var procrvas = newSeq[uint32]()
   for i in 0..<exdir.NumberOfFunctions:
-    var procrva: uint32
-    stream.readBinary(procrva)
-    procrvas.add(procrva)
+    procrvas.add(parseBinary[uint32](stream))
 
   result = newSeq[ExportFunction]()
   for i in 0..<namervas.len:
     stream.moveTo(int(namervas[i] - sectionheader.VirtualAddress + sectionheader.PointerToRawData))
-    var name = ""
-    stream.readBinary(name)
     result.add(ExportFunction(
         address: procrvas[int(ords[i].uint32 - exdir.Base + 1)],
-        name: name,
+        name: parseBinary[string](stream),
     ))
 
 let imgheader = parseBinary[IMAGE_HEARDER32](readFile("test.dll"))
