@@ -122,7 +122,7 @@ type
     else:
       data*: bytes
 
-proc readBinary*(stream: StringStream, section: var Section, sectionheader: IMAGE_SECTION_HEADER, datadirs: seq[IMAGE_DATA_DIRECTORY]) {.rawreadbin.} =
+proc readBinary*(stream: StringStream, section: var Section, sectionheader: IMAGE_SECTION_HEADER, datadirs: seq[IMAGE_DATA_DIRECTORY]) {.readbinproc.} =
   if ($sectionheader.Name).startsWith(".edata"):
     stream.moveTo(int(datadirs[0].VirtualAddress - sectionheader.VirtualAddress + sectionheader.PointerToRawData))
     section.kind = sectionEData
@@ -131,7 +131,7 @@ proc readBinary*(stream: StringStream, section: var Section, sectionheader: IMAG
     stream.moveTo(sectionheader.PointerToRawData.int) # TODO:
     section.kind = sectionOther
     stream.readBinary(section.data, sectionheader.SizeOfRawData.int)
-proc readBinary*(stream: StringStream, sections: var seq[Section], sectionheaders: seq[IMAGE_SECTION_HEADER], datadirs: seq[IMAGE_DATA_DIRECTORY]) {.rawreadbin.} =
+proc readBinary*(stream: StringStream, sections: var seq[Section], sectionheaders: seq[IMAGE_SECTION_HEADER], datadirs: seq[IMAGE_DATA_DIRECTORY]) {.readbinproc.} =
   sections = newSeq[Section](sectionheaders.len)
   for i in 0..<sectionheaders.len:
     stream.readBinary(sections[i], sectionheaders[i], datadirs)

@@ -167,11 +167,8 @@ proc genReadBinaryProc*(name: NimNode, body: NimNode): NimNode {.compileTime.} =
     else:
       error "unsupported binary type: " & fieldexpr.repr, b
 
-  result = newStmtList()
-  result.add(parseExpr("{.push hint[XDeclaredButNotUsed]: off.}"))
-  result.add(parseExpr(fmt"proc ${procname}*(stream: StringStream, self: var ${name.typename}) = discard"))
-  result[^1][6] = procbody
-  result.add(parseExpr("{.pop.}"))
+  result = parseExpr(fmt"proc ${procname}*(stream: StringStream, self: var ${name.typename}) = discard")
+  result[6] = procbody
 
 proc genWriteBinaryProc*(name: NimNode, body: NimNode): NimNode {.compileTime.} =
   let procname = ident"writeBinary"
@@ -202,7 +199,7 @@ macro binary*(name: untyped, body: untyped): untyped =
 
   echo result.repr
 
-macro rawreadbin*(body: untyped): untyped =
+macro readbinproc*(body: untyped): untyped =
   var bodycopy = body.copy
   let tname = if body[3][2][1][0].kind == nnkBracketExpr:
                 $body[3][2][1][0][0]

@@ -84,11 +84,11 @@ proc readBinary*(stream: StringStream, binobj: var byte4) =
   binobj.data[1] = stream.readChar().byte
   binobj.data[2] = stream.readChar().byte
   binobj.data[3] = stream.readChar().byte
-proc readBinary*(stream: StringStream, binobj: var bytes, size: int) {.rawreadbin.} =
+proc readBinary*(stream: StringStream, binobj: var bytes, size: int) {.readbinproc.} =
   binobj = bytes(newString(size))
   for i in 0..<size:
     binobj[i] = stream.readChar()
-proc readBinary*(stream: StringStream, binobj: var ID, s: string) {.rawreadbin.} =
+proc readBinary*(stream: StringStream, binobj: var ID, s: string) {.readbinproc.} =
   var ss = ""
   for c in s:
     ss.add(stream.readChar())
